@@ -1,25 +1,74 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'dart:async';
 
-void main() {
+void main() async {
+  Future<void> onNotificationCreatedMethod(
+      ReceivedNotification receivedNotification) async {
+    debugPrint('onNotificationCreatedMethod');
+  }
 
+  Future<void> onNotificationDisplayedMethod(
+      ReceivedNotification receivedNotification) async {
+    debugPrint('onNotificationDisplayedMethod');
+  }
+
+  Future<void> onDismissActionReceivedMethod(
+      ReceivedAction receivedAction) async {
+    debugPrint('onDismissActionReceivedMethod');
+  }
+
+  Future<void> onActionReceivedMethod(ReceivedAction receivedAction) async {
+    // Handle the action received
+// Access the payload from the received action
+
+    // Check if we are running in a web environment
+    if (kIsWeb) {
+      // Handle navigation for web
+      // Replace the line below with your web navigation logic
+      print('Navigation not supported in web');
+    } else {
+      // Navigate in non-web environments
+      navigatorKey.currentState?.pushReplacement(
+        MaterialPageRoute(
+            builder: (BuildContext context) => ActivityListScreen()),
+      );
+    }
+  }
+
+  WidgetsFlutterBinding.ensureInitialized();
   AwesomeNotifications().initialize(
-    null,
-    [
-      NotificationChannel(
-        channelGroupKey: 'basic_channel_group',
-        channelKey: 'basic_channel',
-        channelName: 'Basic notifications',
-        channelDescription: 'Notification channel for basic tests',
-        defaultColor: Color(0xFF9D50DD),
-        ledColor: Colors.white,
-
-      )
-    ],
+      null,
+      [
+        NotificationChannel(
+            channelShowBadge: true,
+            criticalAlerts: true,
+            channelGroupKey: 'basic_channel_group',
+            channelKey: 'basic_channel',
+            channelName: 'Basic notifications',
+            channelDescription: 'Notification channel for basic tests',
+            defaultColor: const Color(0xFF9D50DD),
+            ledColor: Colors.white,
+            enableVibration: true,
+            importance: NotificationImportance.High),
+      ],
+      channelGroups: [
+        NotificationChannelGroup(
+            channelGroupKey: 'basic_channel_group', channelGroupName: "tada"),
+      ],
+      debug: true);
+  await AwesomeNotifications().setListeners(
+    onActionReceivedMethod: onActionReceivedMethod,
+    onNotificationCreatedMethod: onNotificationCreatedMethod,
+    onNotificationDisplayedMethod: onNotificationDisplayedMethod,
+    onDismissActionReceivedMethod: onDismissActionReceivedMethod,
   );
 
-  runApp(MyApp());
+  runApp(const MyApp());
 }
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class Activity {
   String name;
@@ -27,13 +76,21 @@ class Activity {
   TimeOfDay reminderTime;
   bool isCompleted;
 
-  Activity({required this.name, required this.goal, required this.reminderTime, this.isCompleted = false});
+  Activity(
+      {required this.name,
+      required this.goal,
+      required this.reminderTime,
+      this.isCompleted = false});
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
+      debugShowCheckedModeBanner: false,
       title: 'Daily Goal Tracker',
       theme: ThemeData(
         primarySwatch: Colors.blue,
@@ -44,25 +101,32 @@ class MyApp extends StatelessWidget {
 }
 
 class ActivityListScreen extends StatefulWidget {
+  const ActivityListScreen({super.key});
+
   @override
   _ActivityListScreenState createState() => _ActivityListScreenState();
 }
 
 class _ActivityListScreenState extends State<ActivityListScreen> {
-  TimeOfDay _selectedTime = TimeOfDay.now();
+  //TimeOfDay _selectedTime = TimeOfDay.now();
 
   @override
   void initState() {
-    AwesomeNotifications().isNotificationAllowed().then((isAllowed) {
-      if (!isAllowed) {
-        AwesomeNotifications().requestPermissionToSendNotifications();
-      }
-    });
-
     super.initState();
+
+    initializeNotifications();
   }
 
-  void triggerNotification(BuildContext context, Activity activity) {
+  Future<void> initializeNotifications() async {
+    await AwesomeNotifications().isNotificationAllowed().then((isAllowed) {
+      if (!isAllowed) {
+        AwesomeNotifications().requestPermissionToSendNotifications(
+            permissions: [NotificationPermission.Alert]);
+      }
+    });
+  }
+
+  Future<void> triggerNotification(context, Activity activity) async {
     final now = DateTime.now();
     final scheduledTime = DateTime(
       now.year,
@@ -73,13 +137,17 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
     );
 
     if (scheduledTime.isBefore(now) || scheduledTime == now) {
-      scheduledTime.add(Duration(days: 1));
+      scheduledTime.add(const Duration(days: 1));
     }
 
-    final int notificationId = activities.indexOf(activity); // Generate unique ID based on the activity's index
-
-    AwesomeNotifications().createNotification(
+    final int notificationId = activities
+        .indexOf(activity); // Generate unique ID based on the activity's index
+    await AwesomeNotifications().createNotification(
       content: NotificationContent(
+        payload: {
+          "navigate": "true",
+        },
+        notificationLayout: NotificationLayout.Messaging,
         id: notificationId, // Use the generated unique ID
         channelKey: 'basic_channel',
         title: activity.name,
@@ -87,10 +155,6 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
         summary: 'xd',
         displayOnBackground: true,
         displayOnForeground: true,
-        category: NotificationCategory.Event,
-        ticker:'notif'
-
-
       ),
       schedule: NotificationCalendar(
         hour: activity.reminderTime.hour,
@@ -99,14 +163,27 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
       ),
     );
 
-    print('Notification scheduled at ${activity.reminderTime.hour}:${activity.reminderTime.minute}');
+    print(
+        'Notification scheduled at ${activity.reminderTime.hour}:${activity.reminderTime.minute}');
   }
 
   List<Activity> activities = [
-    Activity(name: 'Exercise', goal: 'go to gym', reminderTime: TimeOfDay(hour: 8, minute: 0)),
-    Activity(name: 'Reading', goal: 'read novel', reminderTime: TimeOfDay(hour: 10, minute: 0)),
-    Activity(name: 'Learning', goal: 'learn flutter', reminderTime: TimeOfDay(hour: 14, minute: 0)),
-    Activity(name: 'Eat', goal: 'eat breakfast', reminderTime: TimeOfDay(hour: 7, minute: 0)),
+    Activity(
+        name: 'Exercise',
+        goal: 'go to gym',
+        reminderTime: const TimeOfDay(hour: 8, minute: 0)),
+    Activity(
+        name: 'Reading',
+        goal: 'read novel',
+        reminderTime: const TimeOfDay(hour: 10, minute: 0)),
+    Activity(
+        name: 'Learning',
+        goal: 'learn flutter',
+        reminderTime: const TimeOfDay(hour: 14, minute: 0)),
+    Activity(
+        name: 'Eat',
+        goal: 'eat breakfast',
+        reminderTime: const TimeOfDay(hour: 7, minute: 0)),
   ];
 
   void addActivity(Activity activity) {
@@ -126,7 +203,7 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.blue,
-        title: Text('Daily Goal Tracker'),
+        title: const Text('Daily Goal Tracker'),
       ),
       body: ListView.builder(
         itemCount: activities.length,
@@ -135,13 +212,15 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
             title: Text(
               activities[index].name,
               style: TextStyle(
-                decoration: activities[index].isCompleted ? TextDecoration.lineThrough : null,
+                decoration: activities[index].isCompleted
+                    ? TextDecoration.lineThrough
+                    : null,
                 color: activities[index].isCompleted ? Colors.grey : null,
               ),
             ),
             subtitle: Text(
               'Goal: ${activities[index].goal}',
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.black54,
               ),
             ),
@@ -164,12 +243,13 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
               return AddActivityDialog(
                 addActivity: addActivity,
                 activities: activities,
-                triggerNotification: triggerNotification, // Pass triggerNotification function
+                triggerNotification:
+                    triggerNotification, // Pass triggerNotification function
               );
             },
           );
         },
-        child: Icon(Icons.add),
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -178,9 +258,14 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
 class AddActivityDialog extends StatefulWidget {
   final Function(Activity) addActivity;
   final List<Activity> activities;
-  final Function(BuildContext, Activity) triggerNotification; // Declare triggerNotification function
+  final Function(BuildContext, Activity)
+      triggerNotification; // Declare triggerNotification function
 
-  AddActivityDialog({required this.addActivity, required this.activities, required this.triggerNotification});
+  const AddActivityDialog(
+      {super.key,
+      required this.addActivity,
+      required this.activities,
+      required this.triggerNotification});
 
   @override
   _AddActivityDialogState createState() => _AddActivityDialogState();
@@ -194,7 +279,7 @@ class _AddActivityDialogState extends State<AddActivityDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Add New Activity'),
+      title: const Text('Add New Activity'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -242,8 +327,15 @@ class _AddActivityDialogState extends State<AddActivityDialog> {
             String name = _nameController.text;
             String goal = _goalController.text;
             if (name.isNotEmpty && goal.isNotEmpty) {
-              widget.addActivity(Activity(name: name, goal: goal, reminderTime: _selectedTime));
-              widget.triggerNotification(context, Activity(name: name, goal: goal, reminderTime: _selectedTime)); // Call triggerNotification function
+              widget.addActivity(Activity(
+                  name: name, goal: goal, reminderTime: _selectedTime));
+              widget.triggerNotification(
+                  context,
+                  Activity(
+                      name: name,
+                      goal: goal,
+                      reminderTime:
+                          _selectedTime)); // Call triggerNotification function
               Navigator.pop(context);
             }
           },
